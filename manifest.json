@@ -1,0 +1,15 @@
+{
+  "name": "マイ日記",
+  "short_name": "マイ日記",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#fffaf6",
+  "theme_color": "#9a7165",
+  "icons": [
+    {
+      "src": "https://via.placeholder.com/192/9a7165/ffffff?text=日記",
+      "sizes": "192x192",
+      "type": "image/png"
+    }
+  ]
+}

@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>マイ日記</title>
+  
+  <!-- PWA Settings -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="マイ日記">
+  <link rel="apple-touch-icon" href="icon-192.png">
+
+  <link rel="stylesheet" href="style.css">
+  <!-- オフライン画像保存用ライブラリ (CDNから読み込み、一度読めばキャッシュ可能) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"></script>
+</head>
+<body>
+
+  <header class="app-header">
+    <h1>📖 マイ日記</h1>
+  </header>
+
+  <main class="container">
+    <!-- カレンダーセクション -->
+    <section class="card">
+      <div class="calendar-header">
+        <button id="prev-month">◀</button>
+        <h2 id="calendar-title">2026年 9月</h2>
+        <button id="next-month">▶</button>
+      </div>
+      <div class="calendar-grid-header">
+        <span>日</span><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span>土</span>
+      </div>
+      <div id="calendar-days" class="calendar-grid"></div>
+    </section>
+
+    <!-- 日記フォームセクション -->
+    <section class="card" id="form-section">
+      <h3 id="selected-date-text">2026年09月29日の日記</h3>
+      
+      <!-- 気分選択 -->
+      <div class="form-group">
+        <label>😊 今日の気分</label>
+        <div class="emoji-selector" id="mood-selector">
+          <button type="button" data-val="😄">😄</button>
+          <button type="button" data-val="😊">😊</button>
+          <button type="button" data-val="😐">😐</button>
+          <button type="button" data-val="😢">😢</button>
+          <button type="button" data-val="😡">😡</button>
+        </div>
+      </div>
+
+      <!-- 天気選択 -->
+      <div class="form-group">
+        <label>☀️ 天気</label>
+        <div class="emoji-selector" id="weather-selector">
+          <button type="button" data-val="☀️">☀️</button>
+          <button type="button" data-val="⛅">⛅</button>
+          <button type="button" data-val="☁️">☁️</button>
+          <button type="button" data-val="🌧️">🌧️</button>
+          <button type="button" data-val="❄️">❄️</button>
+        </div>
+      </div>
+
+      <!-- 日記本文 -->
+      <div class="form-group">
+        <label for="entry-text">✏️ 本文</label>
+        <textarea id="entry-text" rows="4" placeholder="今日はどんな一日でしたか？"></textarea>
+      </div>
+
+      <!-- 写真追加 -->
+      <div class="form-group">
+        <label>📷 写真を追加</label>
+        <input type="file" id="image-input" accept="image/*" multiple style="display: none;">
+        <button type="button" class="btn btn-secondary" onclick="document.getElementById('image-input').click()">写真を選択</button>
+        <div id="image-preview" class="image-grid"></div>
+      </div>
+
+      <!-- 保存 & 削除ボタン -->
+      <div class="button-group">
+        <button type="button" id="save-btn" class="btn btn-primary">💾 保存する</button>
+        <button type="button" id="delete-btn" class="btn btn-danger" style="display: none;">🗑️ 削除</button>
+      </div>
+    </section>
+
+    <!-- 過去の日記一覧 -->
+    <section class="card">
+      <h3>📜 過去の日記一覧</h3>
+      <div id="entry-list"></div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
