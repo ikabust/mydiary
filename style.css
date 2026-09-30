@@ -12,7 +12,7 @@
   box-sizing: border-box;
   margin: 0;
   padding: 0;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -44,10 +44,11 @@ body {
   gap: 16px;
 }
 
+/* カード共通スタイル（余白をゆったり調整） */
 .card {
   background: #fff;
   border-radius: 16px;
-  padding: 16px;
+  padding: 18px 18px 22px 18px; /* 右と下にしっかり余白を持たせる */
   border: 1px solid var(--line);
   box-shadow: 0 2px 8px rgba(118, 82, 71, 0.04);
 }
@@ -64,6 +65,7 @@ h3 {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 12px;
+  padding: 0 4px;
 }
 
 .calendar-header button {
@@ -87,17 +89,28 @@ h3 {
   margin-bottom: 8px;
 }
 
+/* カレンダーグリッド全体の右・下余白調整 */
+.calendar-grid {
+  gap: 2px;
+  padding: 4px 4px 10px 4px; /* 右と下にゆとりを持たせる */
+}
+
+/* カレンダーの日付セル（文字サイズとはみ出しを修正） */
 .calendar-grid .day {
   aspect-ratio: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  font-size: 0.9rem;
+  font-size: 0.85rem; /* はみ出さないように少し小さめ（0.85rem）に調整 */
+  font-weight: 500;
   border-radius: 50%;
-  margin: 2px;
+  margin: 0 auto;
+  width: 100%;
+  max-width: 36px;
   cursor: pointer;
   position: relative;
+  user-select: none;
 }
 
 .calendar-grid .day.selected {
@@ -106,6 +119,7 @@ h3 {
   font-weight: bold;
 }
 
+/* 日記がある日の印 */
 .calendar-grid .day.has-entry::after {
   content: '';
   width: 4px;
@@ -113,7 +127,7 @@ h3 {
   background-color: var(--brown);
   border-radius: 50%;
   position: absolute;
-  bottom: 4px;
+  bottom: 3px;
 }
 
 /* フォーム Styles */
@@ -226,6 +240,7 @@ textarea:focus {
 .entry-card {
   padding: 12px 0;
   border-bottom: 1px solid var(--line);
+  cursor: pointer;
 }
 
 .entry-card:last-child {
