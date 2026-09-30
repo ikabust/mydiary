@@ -1,7 +1,7 @@
 // 日付の初期設定
 let currentDate = new Date();
 let selectedDateStr = formatDate(new Date());
-let currentImages = []; // base64 strings
+let currentImages = []; // 圧縮済み Base64 文字列配列
 
 // PWA ServiceWorker登録
 if ('serviceWorker' in navigator) {
@@ -24,12 +24,15 @@ function formatDate(d) {
 
 // イベントリスナー設定
 function setupEventListeners() {
+  // 月移動のバグを防ぐため、1日をセットしてから移動
   document.getElementById('prev-month').addEventListener('click', () => {
+    currentDate.setDate(1);
     currentDate.setMonth(currentDate.getMonth() - 1);
     renderCalendar();
   });
 
   document.getElementById('next-month').addEventListener('click', () => {
+    currentDate.setDate(1);
     currentDate.setMonth(currentDate.getMonth() + 1);
     renderCalendar();
   });
@@ -44,6 +47,7 @@ function setupEventListeners() {
 
 function setupEmojiSelector(id) {
   const container = document.getElementById(id);
+  if (!container) return;
   container.querySelectorAll('button').forEach(btn => {
     btn.addEventListener('click', () => {
       container.querySelectorAll('button').forEach(b => b.classList.remove('selected'));
@@ -69,7 +73,7 @@ function setEmojiValue(id, val) {
 async function renderCalendar() {
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
-  
+
   document.getElementById('calendar-title').innerText = `${year}年 ${month + 1}月`;
 
   const firstDay = new Date(year, month, 1).getDay();
@@ -77,7 +81,7 @@ async function renderCalendar() {
   const grid = document.getElementById('calendar-days');
   grid.innerHTML = '';
 
-  // 全保存データを取得してマークを表示
+  // 保存済みのキー一覧を取得
   const keys = await localforage.keys();
 
   for (let i = 0; i < firstDay; i++) {
@@ -97,23 +101,61 @@ async function renderCalendar() {
       selectedDateStr = dateStr;
       renderCalendar();
       loadEntryForm(selectedDateStr);
+      // スムーズスクロールでフォームへ移動
+      const formSection = document.getElementById('form-section');
+      if (formSection) formSection.scrollIntoView({ behavior: 'smooth' });
     });
 
     grid.appendChild(dayEl);
   }
 }
 
-// 写真アップロード（Base64圧縮・保持）
+// 写真の圧縮＆読み込み処理（容量削減・パフォーマンス改善）
 function handleImageUpload(e) {
   const files = Array.from(e.target.files);
+  let processedCount = 0;
+
+  if (files.length === 0) return;
+
   files.forEach(file => {
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      currentImages.push(event.target.result);
-      renderImagePreviews();
-    };
-    reader.readAsDataURL(file);
+    compressImage(file, 800, 0.75, (base64Img) => {
+      currentImages.push(base64Img);
+      processedCount++;
+      if (processedCount === files.length) {
+        renderImagePreviews();
+        e.target.value = ''; // 次回同じファイルを選べるようにリセット
+      }
+    });
   });
+}
+
+// Canvasを使った画像リサイズ・圧縮関数
+function compressImage(file, maxWidth, quality, callback) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const img = new Image();
+    img.onload = () => {
+      let width = img.width;
+      let height = img.height;
+
+      if (width > maxWidth) {
+        height = Math.round((height * maxWidth) / width);
+        width = maxWidth;
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+
+      // JPEGフォーマットで指定品質にて圧縮
+      const base64 = canvas.toDataURL('image/jpeg', quality);
+      callback(base64);
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
 }
 
 function renderImagePreviews() {
@@ -122,10 +164,20 @@ function renderImagePreviews() {
   currentImages.forEach((src, index) => {
     const item = document.createElement('div');
     item.className = 'image-preview-item';
-    item.innerHTML = `
-      <img src="${src}">
-      <button class="remove-img" onclick="removeImage(${index})">✕</button>
-    `;
+
+    const img = document.createElement('img');
+    img.src = src;
+
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'remove-img';
+    removeBtn.innerText = '✕';
+    removeBtn.addEventListener('click', (evt) => {
+      evt.stopPropagation();
+      removeImage(index);
+    });
+
+    item.appendChild(img);
+    item.appendChild(removeBtn);
     container.appendChild(item);
   });
 }
@@ -141,8 +193,8 @@ async function loadEntryForm(dateStr) {
   const entry = await localforage.getItem(dateStr);
 
   if (entry) {
-    setEmojiValue('mood-selector', entry.mood);
-    setEmojiValue('weather-selector', entry.weather);
+    setEmojiValue('mood-selector', entry.mood || '');
+    setEmojiValue('weather-selector', entry.weather || '');
     document.getElementById('entry-text').value = entry.text || '';
     currentImages = entry.images || [];
     document.getElementById('delete-btn').style.display = 'block';
@@ -167,10 +219,15 @@ async function saveEntry() {
     updatedAt: new Date().getTime()
   };
 
-  await localforage.setItem(selectedDateStr, data);
-  alert('日記を保存しました！');
-  await renderCalendar();
-  await renderEntryList();
+  try {
+    await localforage.setItem(selectedDateStr, data);
+    alert('日記を保存しました！');
+    await renderCalendar();
+    await renderEntryList();
+  } catch (err) {
+    alert('保存に失敗しました。容量を超えている可能性があります。');
+    console.error(err);
+  }
 }
 
 // 削除処理
@@ -189,10 +246,11 @@ async function renderEntryList() {
   container.innerHTML = '';
 
   const keys = await localforage.keys();
-  keys.sort().reverse(); // 新しい順
+  // 日付文字列 (YYYY-MM-DD) は文字コードソートで正しく降順（新しい順）になります
+  keys.sort().reverse();
 
   if (keys.length === 0) {
-    container.innerHTML = '<p style="color: var(--muted); font-size: 0.85rem;">まだ日記がありません。</p>';
+    container.innerHTML = '<p style="color: var(--muted, #888); font-size: 0.85rem;">まだ日記がありません。</p>';
     return;
   }
 
@@ -216,10 +274,12 @@ async function renderEntryList() {
 
     card.addEventListener('click', () => {
       selectedDateStr = entry.date;
-      currentDate = new Date(entry.date);
+      // Dateの構文解析エラー防止のためにハイフンをスラッシュに置換
+      currentDate = new Date(entry.date.replace(/-/g, '/'));
       renderCalendar();
       loadEntryForm(selectedDateStr);
-      document.getElementById('form-section').scrollIntoView({ behavior: 'smooth' });
+      const formSection = document.getElementById('form-section');
+      if (formSection) formSection.scrollIntoView({ behavior: 'smooth' });
     });
 
     container.appendChild(card);
@@ -227,5 +287,7 @@ async function renderEntryList() {
 }
 
 function escapeHtml(str) {
-  return str.replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+  return str
+    .replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]))
+    .replace(/\n/g, '<br>'); // 改行文字を <br> に変換
 }
