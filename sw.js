@@ -1,4 +1,4 @@
-const CACHE_NAME = 'diary-app-v3'; // バージョンを更新
+const CACHE_NAME = 'diary-app-v4'; // バージョンを更新
 const ASSETS = [
   './',
   './index.html',
@@ -15,7 +15,7 @@ self.addEventListener('install', (e) => {
   self.skipWaiting();
 });
 
-// 古いキャッシュをクリアするイベントを追加
+// 古いキャッシュをクリアするイベント
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys().then((keys) => {

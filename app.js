@@ -22,6 +22,12 @@ function formatDate(d) {
   return `${year}-${month}-${day}`;
 }
 
+// "YYYY-MM-DD" から安全に Date オブジェクトを生成（タイムゾーンずれ防止）
+function parseDateStr(dateStr) {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
 // イベントリスナー設定
 function setupEventListeners() {
   // 月移動のバグを防ぐため、1日をセットしてから移動
@@ -110,52 +116,56 @@ async function renderCalendar() {
   }
 }
 
-// 写真の圧縮＆読み込み処理（容量削減・パフォーマンス改善）
-function handleImageUpload(e) {
+// 写真の圧縮＆読み込み処理（Promise化して正確に完了を待機）
+async function handleImageUpload(e) {
   const files = Array.from(e.target.files);
-  let processedCount = 0;
-
   if (files.length === 0) return;
 
-  files.forEach(file => {
-    compressImage(file, 800, 0.75, (base64Img) => {
-      currentImages.push(base64Img);
-      processedCount++;
-      if (processedCount === files.length) {
-        renderImagePreviews();
-        e.target.value = ''; // 次回同じファイルを選べるようにリセット
-      }
-    });
-  });
+  try {
+    const uploadPromises = files.map(file => compressImage(file, 800, 0.75));
+    const newBase64Images = await Promise.all(uploadPromises);
+    
+    currentImages.push(...newBase64Images);
+    renderImagePreviews();
+  } catch (err) {
+    console.error('画像処理エラー:', err);
+    alert('画像の処理中にエラーが発生しました。');
+  } finally {
+    e.target.value = ''; // 次回同じファイルを選べるようにリセット
+  }
 }
 
-// Canvasを使った画像リサイズ・圧縮関数
-function compressImage(file, maxWidth, quality, callback) {
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    const img = new Image();
-    img.onload = () => {
-      let width = img.width;
-      let height = img.height;
+// Canvasを使った画像リサイズ・圧縮関数（Promise形式・向き自動補正対応）
+function compressImage(file, maxWidth, quality) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('ファイルの読み込みに失敗しました'));
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('画像の読み込みに失敗しました'));
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
 
-      if (width > maxWidth) {
-        height = Math.round((height * maxWidth) / width);
-        width = maxWidth;
-      }
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
 
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, width, height);
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
 
-      // JPEGフォーマットで指定品質にて圧縮
-      const base64 = canvas.toDataURL('image/jpeg', quality);
-      callback(base64);
+        // JPEGフォーマットで指定品質にて圧縮
+        const base64 = canvas.toDataURL('image/jpeg', quality);
+        resolve(base64);
+      };
+      img.src = e.target.result;
     };
-    img.src = e.target.result;
-  };
-  reader.readAsDataURL(file);
+    reader.readAsDataURL(file);
+  });
 }
 
 function renderImagePreviews() {
@@ -171,6 +181,7 @@ function renderImagePreviews() {
     const removeBtn = document.createElement('button');
     removeBtn.className = 'remove-img';
     removeBtn.innerText = '✕';
+    removeBtn.type = 'button';
     removeBtn.addEventListener('click', (evt) => {
       evt.stopPropagation();
       removeImage(index);
@@ -246,7 +257,7 @@ async function renderEntryList() {
   container.innerHTML = '';
 
   const keys = await localforage.keys();
-  // 日付文字列 (YYYY-MM-DD) は文字コードソートで正しく降順（新しい順）になります
+  // 日付文字列 (YYYY-MM-DD) は文字コードソートで降順（新しい順）
   keys.sort().reverse();
 
   if (keys.length === 0) {
@@ -269,13 +280,12 @@ async function renderEntryList() {
         <span>${entry.mood || ''} ${entry.weather || ''}</span>
       </div>
       <div class="entry-body">${escapeHtml(entry.text || '')}</div>
-      <div class="entry-images">${imgsHtml}</div>
+      ${imgsHtml ? `<div class="entry-images">${imgsHtml}</div>` : ''}
     `;
 
     card.addEventListener('click', () => {
       selectedDateStr = entry.date;
-      // Dateの構文解析エラー防止のためにハイフンをスラッシュに置換
-      currentDate = new Date(entry.date.replace(/-/g, '/'));
+      currentDate = parseDateStr(entry.date);
       renderCalendar();
       loadEntryForm(selectedDateStr);
       const formSection = document.getElementById('form-section');
@@ -289,5 +299,5 @@ async function renderEntryList() {
 function escapeHtml(str) {
   return str
     .replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]))
-    .replace(/\n/g, '<br>'); // 改行文字を <br> に変換
+    .replace(/\n/g, '<br>');
 }
