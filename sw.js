@@ -1,4 +1,4 @@
-const CACHE_NAME = 'diary-app-v2'; // バージョンを更新
+const CACHE_NAME = 'diary-app-v3'; // バージョンを更新
 const ASSETS = [
   './',
   './index.html',
