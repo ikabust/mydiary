@@ -13,54 +13,8 @@
   <link rel="apple-touch-icon" href="icon-192.png">
 
   <link rel="stylesheet" href="style.css">
-  <style>
-    /* カレンダー右側・下側の余白調整用スタイル例（style.cssに記述するか、ここに配置） */
-    .container {
-      padding: 16px;
-    }
 
-    .card {
-      background: #ffffff;
-      border-radius: 16px;
-      padding: 20px 20px 24px 20px; /* 下部・左右の余白をゆったり確保 */
-      margin-bottom: 24px; /* 下のカードとの間の余白 */
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-    }
-
-    /* カレンダーエリア全体の余白とスタイリング */
-    .calendar-section {
-      padding-right: 12px; /* 右側のスペース調整 */
-      padding-bottom: 16px; /* 下側のスペース調整 */
-    }
-
-    .calendar-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 16px;
-      padding: 0 4px;
-    }
-
-    .calendar-grid-header,
-    .calendar-grid {
-      display: grid;
-      grid-template-columns: repeat(7, 1fr);
-      gap: 8px;
-      text-align: center;
-    }
-
-    .calendar-grid-header {
-      margin-bottom: 8px;
-      font-weight: bold;
-      color: #666;
-    }
-
-    .calendar-grid {
-      padding: 4px 8px 12px 4px; /* カレンダー日付グリッドの右(8px)と下(12px)に余白を追加 */
-    }
-  </style>
-
-  <!-- オフライン画像保存用ライブラリ (CDNから読み込み、一度読めばキャッシュ可能) -->
+  <!-- オフラインストレージライブラリ (localForage) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"></script>
 </head>
 <body>
@@ -73,9 +27,9 @@
     <!-- カレンダーセクション -->
     <section class="card calendar-section">
       <div class="calendar-header">
-        <button id="prev-month">◀</button>
-        <h2 id="calendar-title">2026年 9月</h2>
-        <button id="next-month">▶</button>
+        <button id="prev-month" type="button">◀</button>
+        <h2 id="calendar-title">年 月</h2>
+        <button id="next-month" type="button">▶</button>
       </div>
       <div class="calendar-grid-header">
         <span>日</span><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span>土</span>
@@ -85,7 +39,7 @@
 
     <!-- 日記フォームセクション -->
     <section class="card" id="form-section">
-      <h3 id="selected-date-text">2026年09月29日の日記</h3>
+      <h3 id="selected-date-text">日記の作成</h3>
       
       <!-- 気分選択 -->
       <div class="form-group">
