@@ -5,6 +5,7 @@ const ASSETS = [
   './style.css',
   './app.js',
   './manifest.json',
+  './読書猫さん.png',
   'https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js'
 ];
 
