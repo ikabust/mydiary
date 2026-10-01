@@ -3,9 +3,22 @@ let currentDate = new Date();
 let selectedDateStr = formatDate(new Date());
 let currentImages = []; // 圧縮済み Base64 文字列配列
 
-// PWA ServiceWorker登録
+// PWA ServiceWorker登録（自動更新検知対応）
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js').catch(() => {});
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').then((registration) => {
+      registration.onupdatefound = () => {
+        const installingWorker = registration.installing;
+        if (installingWorker == null) return;
+        installingWorker.onstatechange = () => {
+          if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+            console.log('新しいバージョンが利用可能です。再読み込みします。');
+            window.location.reload();
+          }
+        };
+      };
+    }).catch(() => {});
+  });
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -30,7 +43,6 @@ function parseDateStr(dateStr) {
 
 // イベントリスナー設定
 function setupEventListeners() {
-  // 月移動のバグを防ぐため、1日をセットしてから移動
   document.getElementById('prev-month').addEventListener('click', () => {
     currentDate.setDate(1);
     currentDate.setMonth(currentDate.getMonth() - 1);
@@ -49,6 +61,15 @@ function setupEventListeners() {
   document.getElementById('image-input').addEventListener('change', handleImageUpload);
   document.getElementById('save-btn').addEventListener('click', saveEntry);
   document.getElementById('delete-btn').addEventListener('click', deleteEntry);
+
+  // バックアップ & 復元ボタンのイベント設定
+  document.getElementById('export-btn').addEventListener('click', exportBackup);
+  
+  const importBtn = document.getElementById('import-btn');
+  const importFileInput = document.getElementById('import-file-input');
+  
+  importBtn.addEventListener('click', () => importFileInput.click());
+  importFileInput.addEventListener('change', importBackup);
 }
 
 function setupEmojiSelector(id) {
@@ -87,7 +108,6 @@ async function renderCalendar() {
   const grid = document.getElementById('calendar-days');
   grid.innerHTML = '';
 
-  // 保存済みのキー一覧を取得
   const keys = await localforage.keys();
 
   for (let i = 0; i < firstDay; i++) {
@@ -107,7 +127,6 @@ async function renderCalendar() {
       selectedDateStr = dateStr;
       renderCalendar();
       loadEntryForm(selectedDateStr);
-      // スムーズスクロールでフォームへ移動
       const formSection = document.getElementById('form-section');
       if (formSection) formSection.scrollIntoView({ behavior: 'smooth' });
     });
@@ -116,7 +135,7 @@ async function renderCalendar() {
   }
 }
 
-// 写真の圧縮＆読み込み処理（Promise化して正確に完了を待機）
+// 写真の圧縮＆読み込み処理
 async function handleImageUpload(e) {
   const files = Array.from(e.target.files);
   if (files.length === 0) return;
@@ -131,11 +150,11 @@ async function handleImageUpload(e) {
     console.error('画像処理エラー:', err);
     alert('画像の処理中にエラーが発生しました。');
   } finally {
-    e.target.value = ''; // 次回同じファイルを選べるようにリセット
+    e.target.value = '';
   }
 }
 
-// Canvasを使った画像リサイズ・圧縮関数（Promise形式・向き自動補正対応）
+// Canvasを使った画像リサイズ・圧縮関数
 function compressImage(file, maxWidth, quality) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -158,7 +177,6 @@ function compressImage(file, maxWidth, quality) {
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, width, height);
 
-        // JPEGフォーマットで指定品質にて圧縮
         const base64 = canvas.toDataURL('image/jpeg', quality);
         resolve(base64);
       };
@@ -257,7 +275,6 @@ async function renderEntryList() {
   container.innerHTML = '';
 
   const keys = await localforage.keys();
-  // 日付文字列 (YYYY-MM-DD) は文字コードソートで降順（新しい順）
   keys.sort().reverse();
 
   if (keys.length === 0) {
@@ -301,14 +318,13 @@ function escapeHtml(str) {
     .replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]))
     .replace(/\n/g, '<br>');
 }
+
 // ----------------------------------------------------
 // バックアップ（エクスポート）機能
 // ----------------------------------------------------
-document.getElementById('export-btn').addEventListener('click', async () => {
+async function exportBackup() {
   try {
     const backupData = {};
-    
-    // localForage内の全キーと値を連想配列に格納
     await localforage.iterate((value, key) => {
       backupData[key] = value;
     });
@@ -318,12 +334,10 @@ document.getElementById('export-btn').addEventListener('click', async () => {
       return;
     }
 
-    // JSON形式に変換
     const jsonString = JSON.stringify(backupData, null, 2);
     const blob = new Blob([jsonString], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
 
-    // ダウンロード用リンクの作成と実行
     const a = document.createElement('a');
     a.href = url;
     a.download = `diary_backup_${new Date().toISOString().slice(0, 10)}.json`;
@@ -334,25 +348,18 @@ document.getElementById('export-btn').addEventListener('click', async () => {
     console.error('バックアップエラー:', err);
     alert('バックアップの作成に失敗しました。');
   }
-});
+}
 
 // ----------------------------------------------------
 // 復元（インポート）機能
 // ----------------------------------------------------
-const importBtn = document.getElementById('import-btn');
-const importFileInput = document.getElementById('import-file-input');
-
-importBtn.addEventListener('click', () => {
-  importFileInput.click();
-});
-
-importFileInput.addEventListener('change', async (event) => {
+async function importBackup(event) {
   const file = event.target.files[0];
   if (!file) return;
 
-  const confirmImport = confirm('現在のデータがバックアップファイルの内容で上書き・追加されます。復元を実行しますか？');
+  const confirmImport = confirm('現在のデータがバックアップファイルの内容で更新されます。復元を実行しますか？');
   if (!confirmImport) {
-    importFileInput.value = '';
+    event.target.value = '';
     return;
   }
 
@@ -361,13 +368,12 @@ importFileInput.addEventListener('change', async (event) => {
     try {
       const data = JSON.parse(e.target.result);
 
-      // 取得したキーと値をlocalForageへ順次保存
       for (const [key, value] of Object.entries(data)) {
         await localforage.setItem(key, value);
       }
 
       alert('復元が完了しました！');
-      location.reload(); // 画面を再読み込みして最新データを反映
+      location.reload();
     } catch (err) {
       console.error('復元エラー:', err);
       alert('ファイルの読み込みに失敗しました。正しいバックアップファイルを選択してください。');
@@ -375,4 +381,4 @@ importFileInput.addEventListener('change', async (event) => {
   };
 
   reader.readAsText(file);
-});
+}

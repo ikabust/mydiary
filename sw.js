@@ -1,9 +1,9 @@
-const CACHE_NAME = 'diary-app-v5'; // バージョンを更新
+const CACHE_NAME = 'diary-app-v6'; // バージョンを更新
 const ASSETS = [
   './',
   './index.html',
-  './style.css',
-  './app.js',
+  './style.css?v=6',
+  './app.js?v=6',
   './manifest.json',
   './読書猫さん.png',
   'https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js'
@@ -16,7 +16,6 @@ self.addEventListener('install', (e) => {
   self.skipWaiting();
 });
 
-// 古いキャッシュをクリアするイベント
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys().then((keys) => {

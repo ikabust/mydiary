@@ -15,7 +15,8 @@
   <meta name="apple-mobile-web-app-title" content="マイ日記">
   <link rel="apple-touch-icon" href="icon-192.png">
 
-  <link rel="stylesheet" href="style.css">
+  <!-- バージョン指定でキャッシュを破棄 -->
+  <link rel="stylesheet" href="style.css?v=6">
 
   <!-- オフラインストレージライブラリ (localForage) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"></script>
@@ -60,10 +61,10 @@
       <div class="form-group">
         <label>☀️ 天気</label>
         <div class="emoji-selector" id="weather-selector">
-          <button type="button" data-val="☀️">☀️️</button>
+          <button type="button" data-val="☀️">☀</button>
           <button type="button" data-val="⛅">⛅</button>
           <button type="button" data-val="☁️">☁️</button>
-          <button type="button" data-val="🌧️">🌧️</button>
+          <button type="button" data-val="🌧️">🌧️️</button>
           <button type="button" data-val="❄️">❄️</button>
         </div>
       </div>
@@ -106,6 +107,7 @@
     </section>
   </main>
 
-  <script src="app.js"></script>
+  <!-- バージョン指定でキャッシュを破棄 -->
+  <script src="app.js?v=6"></script>
 </body>
 </html>
