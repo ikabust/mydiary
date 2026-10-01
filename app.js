@@ -1,151 +1,378 @@
-// 直近で削除した付箋のデータを一時保持する変数
-let lastDeletedNote = null;
-let lastDeletedPageIndex = null;
-let toastTimer = null;
+// 日付の初期設定
+let currentDate = new Date();
+let selectedDateStr = formatDate(new Date());
+let currentImages = []; // 圧縮済み Base64 文字列配列
 
-/* 付箋削除（元に戻す対応） */
-function removeNote(id){
-  const page = data.pages[currentPage];
-  const targetNote = page.notes.find(n => n.id === id);
-  if (!targetNote) return;
-
-  // 削除前にバックアップを保持
-  lastDeletedNote = JSON.parse(JSON.stringify(targetNote));
-  lastDeletedPageIndex = currentPage;
-
-  // データを削除
-  page.notes = page.notes.filter(n => n.id !== id);
-  save();
-  render();
-
-  // 「元に戻す」通知（トースト）を表示
-  showUndoToast();
+// PWA ServiceWorker登録
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 
-/* 削除した付箋を元に戻す */
-function undoDelete(){
-  if (!lastDeletedNote || lastDeletedPageIndex === null) return;
-  
-  // 対象のページが存在するか確認
-  if (data.pages[lastDeletedPageIndex]) {
-    data.pages[lastDeletedPageIndex].notes.push(lastDeletedNote);
-    save();
-    render();
-  }
+document.addEventListener('DOMContentLoaded', async () => {
+  setupEventListeners();
+  await renderCalendar();
+  await loadEntryForm(selectedDateStr);
+  await renderEntryList();
+});
 
-  // 変数をクリア
-  lastDeletedNote = null;
-  lastDeletedPageIndex = null;
-
-  // トーストを非表示にする
-  const toast = document.getElementById("undoToast");
-  if (toast) toast.style.display = "none";
+function formatDate(d) {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
-/* 「元に戻す」通知バーを表示 */
-function showUndoToast(){
-  let toast = document.getElementById("undoToast");
-  if (!toast) {
-    toast = document.createElement("div");
-    toast.id = "undoToast";
-    toast.style.cssText = `
-      position: fixed;
-      bottom: 75px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: #745247;
-      color: #fff;
-      padding: 10px 16px;
-      border-radius: 20px;
-      font-size: 13px;
-      display: flex;
-      gap: 12px;
-      align-items: center;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-      z-index: 100;
-    `;
-    document.body.appendChild(toast);
-  }
-
-  toast.innerHTML = `
-    <span>付箋を削除しました</span>
-    <button type="button" onclick="undoDelete()" style="background:none; border:none; color:#f8d2bd; font-weight:bold; cursor:pointer; padding:0;">元に戻す ↩</button>
-  `;
-  toast.style.display = "flex";
-
-  clearTimeout(toastTimer);
-  // 5秒後に自動的に閉じる
-  toastTimer = setTimeout(() => {
-    toast.style.display = "none";
-  }, 5000);
+// "YYYY-MM-DD" から安全に Date オブジェクトを生成（タイムゾーンずれ防止）
+function parseDateStr(dateStr) {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(year, month - 1, day);
 }
 
-/* 付箋コピー（複製） */
-function duplicateNote(noteData){
-  const page = data.pages[currentPage];
-  if (!page) return;
-
-  const newId = generateUUID();
-  const newNote = {
-    ...JSON.parse(JSON.stringify(noteData)),
-    id: newId,
-    x: Math.min(pageElWidth() - 100, noteData.x + 15), // 少しずらして配置
-    y: noteData.y + 15
-  };
-
-  page.notes.push(newNote);
-  save();
-  render();
-}
-
-// ページの幅を取得する補助関数
-function pageElWidth() {
-  const pageEl = pagesEl.children[currentPage] || pagesEl;
-  return pageEl.getBoundingClientRect().width || 300;
-}
-
-/* 付箋を作る（コピーボタン追加版） */
-function createNoteElement(pageEl, n){
-  const el = document.createElement('div');
-  el.className = 'sticky';
-  el.dataset.id = n.id;
-  el.style.background = n.color;
-  el.style.left = n.x + 'px';
-  el.style.top = n.y + 'px';
-  el.style.transform = `rotate(${n.rot}deg)`;
-  el.innerHTML = `
-    <button type="button" class="del" aria-label="削除">×</button>
-    <textarea placeholder="ここに書く…"></textarea>
-    <button type="button" class="copy" aria-label="コピー" title="複製">📋</button>
-    <button type="button" class="rotate" aria-label="回転">↻</button>
-  `;
-
-  const ta = el.querySelector("textarea");
-  ta.value = n.text;
-
-  ta.addEventListener("input", () => {
-    n.text = ta.value;
-    save();
+// イベントリスナー設定
+function setupEventListeners() {
+  // 月移動のバグを防ぐため、1日をセットしてから移動
+  document.getElementById('prev-month').addEventListener('click', () => {
+    currentDate.setDate(1);
+    currentDate.setMonth(currentDate.getMonth() - 1);
+    renderCalendar();
   });
 
-  el.querySelector(".del").onclick = e => {
-    e.stopPropagation();
-    removeNote(n.id);
-  };
+  document.getElementById('next-month').addEventListener('click', () => {
+    currentDate.setDate(1);
+    currentDate.setMonth(currentDate.getMonth() + 1);
+    renderCalendar();
+  });
 
-  // コピーボタンの動作
-  el.querySelector(".copy").onclick = e => {
-    e.stopPropagation();
-    duplicateNote(n);
-  };
+  setupEmojiSelector('mood-selector');
+  setupEmojiSelector('weather-selector');
 
-  el.querySelector(".rotate").onclick = e => {
-    e.stopPropagation();
-    n.rot = (Number(n.rot) + 2) % 8 - 4;
-    save();
-    render();
-  };
-
-  makeDraggable(el, n, pageEl);
-  pageEl.appendChild(el);
+  document.getElementById('image-input').addEventListener('change', handleImageUpload);
+  document.getElementById('save-btn').addEventListener('click', saveEntry);
+  document.getElementById('delete-btn').addEventListener('click', deleteEntry);
 }
+
+function setupEmojiSelector(id) {
+  const container = document.getElementById(id);
+  if (!container) return;
+  container.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      container.querySelectorAll('button').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+    });
+  });
+}
+
+function getEmojiValue(id) {
+  const selected = document.querySelector(`#${id} button.selected`);
+  return selected ? selected.dataset.val : '';
+}
+
+function setEmojiValue(id, val) {
+  const buttons = document.querySelectorAll(`#${id} button`);
+  buttons.forEach(b => {
+    if (b.dataset.val === val) b.classList.add('selected');
+    else b.classList.remove('selected');
+  });
+}
+
+// カレンダー描画
+async function renderCalendar() {
+  const year = currentDate.getFullYear();
+  const month = currentDate.getMonth();
+
+  document.getElementById('calendar-title').innerText = `${year}年 ${month + 1}月`;
+
+  const firstDay = new Date(year, month, 1).getDay();
+  const lastDate = new Date(year, month + 1, 0).getDate();
+  const grid = document.getElementById('calendar-days');
+  grid.innerHTML = '';
+
+  // 保存済みのキー一覧を取得
+  const keys = await localforage.keys();
+
+  for (let i = 0; i < firstDay; i++) {
+    grid.appendChild(document.createElement('div'));
+  }
+
+  for (let d = 1; d <= lastDate; d++) {
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    const dayEl = document.createElement('div');
+    dayEl.className = 'day';
+    dayEl.innerText = d;
+
+    if (dateStr === selectedDateStr) dayEl.classList.add('selected');
+    if (keys.includes(dateStr)) dayEl.classList.add('has-entry');
+
+    dayEl.addEventListener('click', () => {
+      selectedDateStr = dateStr;
+      renderCalendar();
+      loadEntryForm(selectedDateStr);
+      // スムーズスクロールでフォームへ移動
+      const formSection = document.getElementById('form-section');
+      if (formSection) formSection.scrollIntoView({ behavior: 'smooth' });
+    });
+
+    grid.appendChild(dayEl);
+  }
+}
+
+// 写真の圧縮＆読み込み処理（Promise化して正確に完了を待機）
+async function handleImageUpload(e) {
+  const files = Array.from(e.target.files);
+  if (files.length === 0) return;
+
+  try {
+    const uploadPromises = files.map(file => compressImage(file, 800, 0.75));
+    const newBase64Images = await Promise.all(uploadPromises);
+    
+    currentImages.push(...newBase64Images);
+    renderImagePreviews();
+  } catch (err) {
+    console.error('画像処理エラー:', err);
+    alert('画像の処理中にエラーが発生しました。');
+  } finally {
+    e.target.value = ''; // 次回同じファイルを選べるようにリセット
+  }
+}
+
+// Canvasを使った画像リサイズ・圧縮関数（Promise形式・向き自動補正対応）
+function compressImage(file, maxWidth, quality) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('ファイルの読み込みに失敗しました'));
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('画像の読み込みに失敗しました'));
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+
+        // JPEGフォーマットで指定品質にて圧縮
+        const base64 = canvas.toDataURL('image/jpeg', quality);
+        resolve(base64);
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function renderImagePreviews() {
+  const container = document.getElementById('image-preview');
+  container.innerHTML = '';
+  currentImages.forEach((src, index) => {
+    const item = document.createElement('div');
+    item.className = 'image-preview-item';
+
+    const img = document.createElement('img');
+    img.src = src;
+
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'remove-img';
+    removeBtn.innerText = '✕';
+    removeBtn.type = 'button';
+    removeBtn.addEventListener('click', (evt) => {
+      evt.stopPropagation();
+      removeImage(index);
+    });
+
+    item.appendChild(img);
+    item.appendChild(removeBtn);
+    container.appendChild(item);
+  });
+}
+
+function removeImage(index) {
+  currentImages.splice(index, 1);
+  renderImagePreviews();
+}
+
+// フォームの読み込み
+async function loadEntryForm(dateStr) {
+  document.getElementById('selected-date-text').innerText = `${dateStr.replace(/-/g, '/')} の日記`;
+  const entry = await localforage.getItem(dateStr);
+
+  if (entry) {
+    setEmojiValue('mood-selector', entry.mood || '');
+    setEmojiValue('weather-selector', entry.weather || '');
+    document.getElementById('entry-text').value = entry.text || '';
+    currentImages = entry.images || [];
+    document.getElementById('delete-btn').style.display = 'block';
+  } else {
+    setEmojiValue('mood-selector', '');
+    setEmojiValue('weather-selector', '');
+    document.getElementById('entry-text').value = '';
+    currentImages = [];
+    document.getElementById('delete-btn').style.display = 'none';
+  }
+  renderImagePreviews();
+}
+
+// 保存処理
+async function saveEntry() {
+  const data = {
+    date: selectedDateStr,
+    mood: getEmojiValue('mood-selector'),
+    weather: getEmojiValue('weather-selector'),
+    text: document.getElementById('entry-text').value,
+    images: currentImages,
+    updatedAt: new Date().getTime()
+  };
+
+  try {
+    await localforage.setItem(selectedDateStr, data);
+    alert('日記を保存しました！');
+    await renderCalendar();
+    await renderEntryList();
+  } catch (err) {
+    alert('保存に失敗しました。容量を超えている可能性があります。');
+    console.error(err);
+  }
+}
+
+// 削除処理
+async function deleteEntry() {
+  if (confirm('この日の日記を削除しますか？')) {
+    await localforage.removeItem(selectedDateStr);
+    await loadEntryForm(selectedDateStr);
+    await renderCalendar();
+    await renderEntryList();
+  }
+}
+
+// 過去の日記一覧表示
+async function renderEntryList() {
+  const container = document.getElementById('entry-list');
+  container.innerHTML = '';
+
+  const keys = await localforage.keys();
+  // 日付文字列 (YYYY-MM-DD) は文字コードソートで降順（新しい順）
+  keys.sort().reverse();
+
+  if (keys.length === 0) {
+    container.innerHTML = '<p style="color: var(--muted, #888); font-size: 0.85rem;">まだ日記がありません。</p>';
+    return;
+  }
+
+  for (const key of keys) {
+    const entry = await localforage.getItem(key);
+    if (!entry) continue;
+
+    const card = document.createElement('div');
+    card.className = 'entry-card';
+
+    const imgsHtml = (entry.images || []).map(img => `<img src="${img}">`).join('');
+
+    card.innerHTML = `
+      <div class="entry-header">
+        <span>${entry.date}</span>
+        <span>${entry.mood || ''} ${entry.weather || ''}</span>
+      </div>
+      <div class="entry-body">${escapeHtml(entry.text || '')}</div>
+      ${imgsHtml ? `<div class="entry-images">${imgsHtml}</div>` : ''}
+    `;
+
+    card.addEventListener('click', () => {
+      selectedDateStr = entry.date;
+      currentDate = parseDateStr(entry.date);
+      renderCalendar();
+      loadEntryForm(selectedDateStr);
+      const formSection = document.getElementById('form-section');
+      if (formSection) formSection.scrollIntoView({ behavior: 'smooth' });
+    });
+
+    container.appendChild(card);
+  }
+}
+
+function escapeHtml(str) {
+  return str
+    .replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]))
+    .replace(/\n/g, '<br>');
+}
+// ----------------------------------------------------
+// バックアップ（エクスポート）機能
+// ----------------------------------------------------
+document.getElementById('export-btn').addEventListener('click', async () => {
+  try {
+    const backupData = {};
+    
+    // localForage内の全キーと値を連想配列に格納
+    await localforage.iterate((value, key) => {
+      backupData[key] = value;
+    });
+
+    if (Object.keys(backupData).length === 0) {
+      alert('バックアップするデータがありません。');
+      return;
+    }
+
+    // JSON形式に変換
+    const jsonString = JSON.stringify(backupData, null, 2);
+    const blob = new Blob([jsonString], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+
+    // ダウンロード用リンクの作成と実行
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `diary_backup_${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    console.error('バックアップエラー:', err);
+    alert('バックアップの作成に失敗しました。');
+  }
+});
+
+// ----------------------------------------------------
+// 復元（インポート）機能
+// ----------------------------------------------------
+const importBtn = document.getElementById('import-btn');
+const importFileInput = document.getElementById('import-file-input');
+
+importBtn.addEventListener('click', () => {
+  importFileInput.click();
+});
+
+importFileInput.addEventListener('change', async (event) => {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const confirmImport = confirm('現在のデータがバックアップファイルの内容で上書き・追加されます。復元を実行しますか？');
+  if (!confirmImport) {
+    importFileInput.value = '';
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    try {
+      const data = JSON.parse(e.target.result);
+
+      // 取得したキーと値をlocalForageへ順次保存
+      for (const [key, value] of Object.entries(data)) {
+        await localforage.setItem(key, value);
+      }
+
+      alert('復元が完了しました！');
+      location.reload(); // 画面を再読み込みして最新データを反映
+    } catch (err) {
+      console.error('復元エラー:', err);
+      alert('ファイルの読み込みに失敗しました。正しいバックアップファイルを選択してください。');
+    }
+  };
+
+  reader.readAsText(file);
+});
