@@ -19,7 +19,6 @@
 
   <!-- オフラインストレージライブラリ (localForage) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"></script>
-  
 </head>
 <body>
 
@@ -61,7 +60,7 @@
       <div class="form-group">
         <label>☀️ 天気</label>
         <div class="emoji-selector" id="weather-selector">
-          <button type="button" data-val="☀️">☀️</button>
+          <button type="button" data-val="☀️">☀️️</button>
           <button type="button" data-val="⛅">⛅</button>
           <button type="button" data-val="☁️">☁️</button>
           <button type="button" data-val="🌧️">🌧️</button>
@@ -94,6 +93,16 @@
     <section class="card">
       <h3>📜 過去の日記一覧</h3>
       <div id="entry-list"></div>
+    </section>
+
+    <!-- バックアップ & 復元セクション -->
+    <section class="card">
+      <h3>⚙️ データ管理</h3>
+      <div class="button-group">
+        <button type="button" id="export-btn" class="btn btn-secondary">📥 バックアップ作成</button>
+        <button type="button" id="import-btn" class="btn btn-secondary">📤 復元（復元ファイルを選択）</button>
+        <input type="file" id="import-file-input" accept=".json" style="display: none;">
+      </div>
     </section>
   </main>
 

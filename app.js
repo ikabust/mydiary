@@ -301,3 +301,78 @@ function escapeHtml(str) {
     .replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]))
     .replace(/\n/g, '<br>');
 }
+// ----------------------------------------------------
+// バックアップ（エクスポート）機能
+// ----------------------------------------------------
+document.getElementById('export-btn').addEventListener('click', async () => {
+  try {
+    const backupData = {};
+    
+    // localForage内の全キーと値を連想配列に格納
+    await localforage.iterate((value, key) => {
+      backupData[key] = value;
+    });
+
+    if (Object.keys(backupData).length === 0) {
+      alert('バックアップするデータがありません。');
+      return;
+    }
+
+    // JSON形式に変換
+    const jsonString = JSON.stringify(backupData, null, 2);
+    const blob = new Blob([jsonString], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+
+    // ダウンロード用リンクの作成と実行
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `diary_backup_${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    console.error('バックアップエラー:', err);
+    alert('バックアップの作成に失敗しました。');
+  }
+});
+
+// ----------------------------------------------------
+// 復元（インポート）機能
+// ----------------------------------------------------
+const importBtn = document.getElementById('import-btn');
+const importFileInput = document.getElementById('import-file-input');
+
+importBtn.addEventListener('click', () => {
+  importFileInput.click();
+});
+
+importFileInput.addEventListener('change', async (event) => {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const confirmImport = confirm('現在のデータがバックアップファイルの内容で上書き・追加されます。復元を実行しますか？');
+  if (!confirmImport) {
+    importFileInput.value = '';
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    try {
+      const data = JSON.parse(e.target.result);
+
+      // 取得したキーと値をlocalForageへ順次保存
+      for (const [key, value] of Object.entries(data)) {
+        await localforage.setItem(key, value);
+      }
+
+      alert('復元が完了しました！');
+      location.reload(); // 画面を再読み込みして最新データを反映
+    } catch (err) {
+      console.error('復元エラー:', err);
+      alert('ファイルの読み込みに失敗しました。正しいバックアップファイルを選択してください。');
+    }
+  };
+
+  reader.readAsText(file);
+});
